@@ -1,0 +1,23 @@
+name: thesis
+description: A new Flutter project for LoRa BLE communication.
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.8.1 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_blue_plus: ^1.35.5 # Use latest stable version
+  permission_handler: ^11.3.1 # Use latest to fix iOS/Android edge cases
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1 # Match with Dart 3.8 compatibility
+
+flutter:
+  uses-material-design: true
