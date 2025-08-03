@@ -1,102 +1,92 @@
+// FLUTTER CODE (for both Phone A and Phone B, same code)
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'LoRa BLE Input Sender',
+      title: 'LoRa BLE Chat',
       theme: ThemeData.dark(),
-      home: const LoRaInputScreen(),
+      home: const LoRaChatScreen(),
     );
   }
 }
 
-class LoRaInputScreen extends StatefulWidget {
-  const LoRaInputScreen({super.key});
+class LoRaChatScreen extends StatefulWidget {
+  const LoRaChatScreen({super.key});
+
   @override
-  State<LoRaInputScreen> createState() => _LoRaInputScreenState();
+  State<LoRaChatScreen> createState() => _LoRaChatScreenState();
 }
 
-class _LoRaInputScreenState extends State<LoRaInputScreen> {
+class _LoRaChatScreenState extends State<LoRaChatScreen> {
   BluetoothDevice? connectedDevice;
-  BluetoothCharacteristic? writeCharacteristic;
+  BluetoothCharacteristic? writeChar;
+  BluetoothCharacteristic? notifyChar;
   final TextEditingController inputController = TextEditingController();
-  String status = 'Waiting...';
+  final List<String> messages = [];
 
-  final String targetName = 'LoRaBLE';
-  final Guid serviceUuid = Guid('0000ffe0-0000-1000-8000-00805f9b34fb');
-  final Guid charUuid = Guid('0000ffe1-0000-1000-8000-00805f9b34fb');
+  final String deviceName = 'LoRaAudio';
+  final Guid serviceUuid = Guid('12345678-1234-1234-1234-1234567890ab');
+  final Guid charUuid = Guid('87654321-4321-4321-4321-ba0987654321');
 
   @override
   void initState() {
     super.initState();
-    _startScanAndConnect();
+    _connectToLoRa();
   }
 
-  Future<void> _requestPermissions() async {
-    await Permission.bluetoothScan.request();
-    await Permission.bluetoothConnect.request();
-    await Permission.location.request();
-  }
+  Future<void> _connectToLoRa() async {
+    await [
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+      Permission.location,
+    ].request();
 
-  Future<void> _startScanAndConnect() async {
-    await _requestPermissions();
-
-    setState(() => status = 'Scanning for LoRa device...');
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
-
+    FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
     FlutterBluePlus.scanResults.listen((results) async {
       for (ScanResult r in results) {
-        if (r.device.name == targetName) {
-          setState(() => status = 'Found $targetName. Connecting...');
+        if (r.device.name == deviceName) {
           await FlutterBluePlus.stopScan();
-          try {
-            await r.device.connect();
-          } catch (_) {}
+          await r.device.connect();
           connectedDevice = r.device;
-          await _discoverServices();
+
+          var services = await r.device.discoverServices();
+          for (var service in services) {
+            if (service.uuid == serviceUuid) {
+              for (var char in service.characteristics) {
+                if (char.uuid == charUuid) {
+                  if (char.properties.write) writeChar = char;
+                  if (char.properties.notify) {
+                    notifyChar = char;
+                    await char.setNotifyValue(true);
+                    char.value.listen((value) {
+                      String msg = String.fromCharCodes(value);
+                      setState(() => messages.add('📩 $msg'));
+                    });
+                  }
+                }
+              }
+            }
+          }
           break;
         }
       }
     });
   }
 
-  Future<void> _discoverServices() async {
-    if (connectedDevice == null) return;
-
-    List<BluetoothService> services = await connectedDevice!.discoverServices();
-    for (var s in services) {
-      if (s.uuid == serviceUuid) {
-        for (var c in s.characteristics) {
-          if (c.uuid == charUuid && c.properties.write) {
-            writeCharacteristic = c;
-            setState(() => status = 'Connected. Ready to send.');
-            return;
-          }
-        }
-      }
-    }
-
-    setState(() => status = 'Write characteristic not found.');
-  }
-
   Future<void> _sendMessage() async {
-    if (writeCharacteristic == null || inputController.text.isEmpty) return;
-
-    String message = inputController.text;
-    try {
-      await writeCharacteristic!.write(message.codeUnits);
-      setState(() => status = 'Sent: "$message"');
+    String msg = inputController.text.trim();
+    if (msg.isNotEmpty && writeChar != null) {
+      await writeChar!.write(msg.codeUnits);
+      setState(() => messages.add('📤 $msg'));
       inputController.clear();
-    } catch (e) {
-      setState(() => status = 'Send failed: $e');
     }
   }
 
@@ -110,32 +100,37 @@ class _LoRaInputScreenState extends State<LoRaInputScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('LoRa BLE Sender')),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              status,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18),
+      appBar: AppBar(title: const Text('LoRa Chat')),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: messages.length,
+              itemBuilder: (_, i) => Text(messages[i]),
             ),
-            const SizedBox(height: 30),
-            TextField(
-              controller: inputController,
-              decoration: const InputDecoration(
-                labelText: 'Enter message',
-                border: OutlineInputBorder(),
-              ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: inputController,
+                    decoration: const InputDecoration(
+                      labelText: 'Enter message',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.send),
+                  onPressed: _sendMessage,
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: _sendMessage,
-              child: const Text('Send to LoRa'),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
