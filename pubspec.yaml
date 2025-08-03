@@ -13,6 +13,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_blue_plus: ^1.35.5 # Use latest stable version
   permission_handler: ^11.3.1 # Use latest to fix iOS/Android edge cases
+  google_maps_flutter: ^2.8.0
+  flutter_sound: ^9.2.13
+  path_provider: ^2.1.2
 
 dev_dependencies:
   flutter_test:
